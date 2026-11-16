@@ -1,16 +1,29 @@
-# React + Vite
+# Daymark
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple full-stack task manager with a React/Vite interface and an Express API. Tasks are stored in `fahhhhback/data/tasks.json`.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Open two terminals from the repository root:
 
-## React Compiler
+```sh
+cd fahhhhback
+npm start
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```sh
+cd fahhh1
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Open the Vite URL shown in the frontend terminal.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The frontend connects directly to the API at `http://localhost:3000`; the API enables CORS for `http://localhost:5173`. If your frontend runs at a different origin, set `FRONTEND_ORIGIN` when starting the API. To use a different API address, set `VITE_API_URL` for the frontend (for example, in `fahhh1/.env.local`).
+
+## API
+
+- `GET /api/tasks` — list tasks
+- `GET /api/tasks/:id` — get one task
+- `POST /api/tasks` — create a task (`title`, optional `description`)
+- `PATCH /api/tasks/:id` — update `title`, `description`, or `completed`
+- `DELETE /api/tasks/:id` — delete a task
