@@ -1,29 +1,41 @@
+require("dotenv").config({ path: require("node:path").join(__dirname, ".env") })
+
 const express = require("express")
 const cors = require("cors")
-const fs = require("node:fs")
-const path = require("node:path")
-const { randomUUID } = require("node:crypto")
+const { createClient } = require("@supabase/supabase-js")
 
 const app = express()
 const port = process.env.PORT || 3000
-const frontendOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:5173"
-const dataDirectory = path.join(__dirname, "data")
-const dataFile = path.join(dataDirectory, "tasks.json")
+const frontendOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:5174")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-fs.mkdirSync(dataDirectory, { recursive: true })
-if (!fs.existsSync(dataFile)) {
-  fs.writeFileSync(dataFile, "[]\n")
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in fahhhhback/.env")
+  process.exit(1)
 }
 
-app.use(cors({ origin: frontendOrigin }))
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+})
+
+app.use(cors({ origin: frontendOrigins }))
 app.use(express.json({ limit: "16kb" }))
 
-function readTasks() {
-  return JSON.parse(fs.readFileSync(dataFile, "utf8"))
-}
+const taskIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function writeTasks(tasks) {
-  fs.writeFileSync(dataFile, `${JSON.stringify(tasks, null, 2)}\n`)
+function toTask(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    completed: row.completed,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
 }
 
 function validateTaskInput(body, partial = false) {
@@ -62,48 +74,64 @@ function validateTaskInput(body, partial = false) {
   return null
 }
 
-app.get("/api/tasks", (req, res) => {
-  res.json(readTasks())
+function sendDatabaseError(res, error) {
+  console.error(error)
+  return res.status(500).json({ error: "Something went wrong. Please try again." })
+}
+
+app.get("/api/tasks", async (req, res) => {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .order("created_at", { ascending: false })
+
+  if (error) return sendDatabaseError(res, error)
+  return res.json(data.map(toTask))
 })
 
-app.get("/api/tasks/:id", (req, res) => {
-  const task = readTasks().find((item) => item.id === req.params.id)
-  if (!task) {
+app.get("/api/tasks/:id", async (req, res) => {
+  if (!taskIdPattern.test(req.params.id)) {
     return res.status(404).json({ error: "Task not found." })
   }
-  return res.json(task)
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", req.params.id)
+    .maybeSingle()
+
+  if (error) return sendDatabaseError(res, error)
+  if (!data) return res.status(404).json({ error: "Task not found." })
+  return res.json(toTask(data))
 })
 
-app.post("/api/tasks", (req, res) => {
+app.post("/api/tasks", async (req, res) => {
   const validationError = validateTaskInput(req.body)
   if (validationError) {
     return res.status(400).json({ error: validationError })
   }
 
-  const now = new Date().toISOString()
-  const task = {
-    id: randomUUID(),
-    title: req.body.title.trim(),
-    description: (req.body.description || "").trim(),
-    completed: false,
-    createdAt: now,
-    updatedAt: now,
-  }
-  const tasks = readTasks()
-  tasks.unshift(task)
-  writeTasks(tasks)
-  return res.status(201).json(task)
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert({
+      title: req.body.title.trim(),
+      description: (req.body.description || "").trim(),
+      completed: false,
+    })
+    .select("*")
+    .single()
+
+  if (error) return sendDatabaseError(res, error)
+  return res.status(201).json(toTask(data))
 })
 
-app.patch("/api/tasks/:id", (req, res) => {
+app.patch("/api/tasks/:id", async (req, res) => {
   const validationError = validateTaskInput(req.body, true)
   if (validationError) {
     return res.status(400).json({ error: validationError })
   }
 
-  const tasks = readTasks()
-  const index = tasks.findIndex((item) => item.id === req.params.id)
-  if (index === -1) {
+  if (!taskIdPattern.test(req.params.id)) {
     return res.status(404).json({ error: "Task not found." })
   }
 
@@ -112,19 +140,31 @@ app.patch("/api/tasks/:id", (req, res) => {
   if (Object.hasOwn(req.body, "description")) updates.description = req.body.description.trim()
   if (Object.hasOwn(req.body, "completed")) updates.completed = req.body.completed
 
-  tasks[index] = { ...tasks[index], ...updates, updatedAt: new Date().toISOString() }
-  writeTasks(tasks)
-  return res.json(tasks[index])
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(updates)
+    .eq("id", req.params.id)
+    .select("*")
+    .maybeSingle()
+
+  if (error) return sendDatabaseError(res, error)
+  if (!data) return res.status(404).json({ error: "Task not found." })
+  return res.json(toTask(data))
 })
 
-app.delete("/api/tasks/:id", (req, res) => {
-  const tasks = readTasks()
-  const filteredTasks = tasks.filter((item) => item.id !== req.params.id)
-  if (filteredTasks.length === tasks.length) {
+app.delete("/api/tasks/:id", async (req, res) => {
+  if (!taskIdPattern.test(req.params.id)) {
     return res.status(404).json({ error: "Task not found." })
   }
 
-  writeTasks(filteredTasks)
+  const { data, error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("id", req.params.id)
+    .select("id")
+
+  if (error) return sendDatabaseError(res, error)
+  if (!data.length) return res.status(404).json({ error: "Task not found." })
   return res.status(204).end()
 })
 

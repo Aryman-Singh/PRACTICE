@@ -2,20 +2,12 @@
 {
   "name": "fffffffffffffffffffffffffffff",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "backend": "npm run dev --prefix backend",
-    "frontend": "npm run dev --prefix frontend"
+    "dev": "concurrently \"npm run dev --prefix fahhhhback\" \"npm run dev --prefix fahhh1\"",
+    "backend": "npm run dev --prefix fahhhhback",
+    "frontend": "npm run dev --prefix fahhh1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Aryman-Singh/PRACTICE.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "concurrently": "^10.0.7"
   }
